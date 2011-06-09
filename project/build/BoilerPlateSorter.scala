@@ -18,7 +18,26 @@ trait BoilerplateForSorter extends BoilerplateBase {
     val cleanSrcManaged = cleanTask(srcManagedScala) named ("clean src_managed")
     task {
       def AnyValMap(typename: String): (String, Map[Symbol, String]) =
-        typename -> Map('type -> typename, 'decl -> "", 'le -> "($1 <= $2)", 'gt -> "($1 > $2)", 'cast -> "")
+        typename -> Map(
+            'type -> typename,
+            'decl -> "",
+            'le -> "($1 <= $2)",
+            'gt -> "($1 > $2)",
+            'cast -> "",
+            'carg -> "",
+            'wcmp -> "",
+            'narg -> "")
+            
+      def AnyValMapWithComparator(typename: String): (String, Map[Symbol, String]) =
+        (typename+"WithCompartor") -> Map(
+            'type -> typename,
+            'decl -> "",
+            'le -> "c.compare($1, $2) <= 0",
+            'gt -> "c.compare($1, $2) > 0",
+            'cast -> "",
+            'carg -> "c: java.util.Comparator[\\$TYPE\\$]",
+            'wcmp -> "WithCompartor",
+            'narg -> "(c)")
         
       val types: Map[String, Map[Symbol, String]] = Map(
           AnyValMap("Byte"),
@@ -32,14 +51,36 @@ trait BoilerplateForSorter extends BoilerplateBase {
                           'decl -> "[A <: AnyRef with java.lang.Comparable[A]]",
                           'le   -> "(($1).compareTo($2) <= 0)",
                           'gt   -> "(($1).compareTo($2) > 0)",
-                          'cast -> ".asInstanceOf[Array[java.lang.Object]]"))
+                          'cast -> ".asInstanceOf[Array[java.lang.Object]]",
+                          'carg -> "",
+                          'wcmp -> "",
+                          'narg -> ""),         
+          AnyValMapWithComparator("Byte"),
+          AnyValMapWithComparator("Char"),
+          AnyValMapWithComparator("Double"),
+          AnyValMapWithComparator("Float"),
+          AnyValMapWithComparator("Int"),
+          AnyValMapWithComparator("Long"),
+          AnyValMapWithComparator("Short"),                          
+          "ObjectWithComparator" -> Map('type -> "A",
+                          'decl -> "[A <: AnyRef with java.lang.Comparable[A]]",
+                          'le   -> "(($1).compareTo($2) <= 0)",
+                          'gt   -> "(($1).compareTo($2) > 0)",
+                          'cast -> ".asInstanceOf[Array[java.lang.Object]]",
+                          'carg -> "c: java.util.Comparator[\\$TYPE\\$]",
+                          'wcmp -> "WithCompartor",
+                          'narg -> "(c)"))
 
-     def replaceWithMap(str: String) = for { (_, map) <- types } yield
-        str.replaceAll("\\$TYPE\\$", map('type))
+     def replaceWithMap(str: String) = for { (_, map) <- types.toList.sort(_._1 < _._1) } yield
+        str.replaceAll("\\$CARG\\$", map('carg))
+           .replaceAll("\\$CARGSEP\\$", (if (map('carg).isEmpty) "" else " ,"))
+           .replaceAll("\\$WCMP\\$", map('wcmp))
+           .replaceAll("\\$NARG\\$", map('narg))
+           .replaceAll("\\$TYPE\\$", map('type))
            .replaceAll("\\$DECL\\$", map('decl))
            .replaceAll("\\$CAST\\$", map('cast))
            .replaceAll("""\$LE\$\s*\(([^,]+),\s*([^()]+)\)""", map('le))
-           .replaceAll("""\$GT\$\s*\(([^,]+),\s*([^()]+)\)""", map('gt))
+           .replaceAll("""\$GT\$\s*\(([^,]+),\s*([^()]+)\)""", map('gt))       
                           
       val sortInterfaces = replaceWithMap(Plate.sortTemplate)          
       val sorterClasses = replaceWithMap(Plate.sorterTemplate)
@@ -87,7 +128,7 @@ object ParArrays {
 
 object Plate {
   val sorterTemplate = """
-  private class SorterOf$TYPE$$DECL$ extends Runnable {
+  private class SorterOf$TYPE$$WCMP$$DECL$($CARG$) extends Runnable {
     val NTHRES = 10000
     var queue: PriorityStack = null
     var array: Array[$TYPE$] = null
@@ -164,12 +205,12 @@ object Plate {
 """
   
   val sortTemplate = """
-  def sort$DECL$(a: Array[$TYPE$]) = {
-    (new SorterOf$TYPE$).sort(a)
+  def sort$DECL$(a: Array[$TYPE$]$CARGSEP$$CARG$) = {
+    (new SorterOf$TYPE$$WCMP$$NARG$).sort(a)
   }
 
-  def sort$DECL$(a: Array[$TYPE$], beginIndex: Int, endIndex: Int) {
-    (new SorterOf$TYPE$).sort(a, beginIndex, endIndex)
+  def sort$DECL$(a: Array[$TYPE$], beginIndex: Int, endIndex: Int$CARGSEP$$CARG$) {
+    (new SorterOf$TYPE$$WCMP$$NARG$).sort(a, beginIndex, endIndex)
   }
 """
 }
