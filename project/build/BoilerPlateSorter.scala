@@ -24,21 +24,11 @@ trait BoilerplateForSorter extends BoilerplateBase {
             'le -> "($1 <= $2)",
             'gt -> "($1 > $2)",
             'cast -> "",
+            'cext -> "",
             'carg -> "",
             'wcmp -> "",
             'narg -> "")
-            
-      def AnyValMapWithComparator(typename: String): (String, Map[Symbol, String]) =
-        (typename+"WithCompartor") -> Map(
-            'type -> typename,
-            'decl -> "",
-            'le -> "c.compare($1, $2) <= 0",
-            'gt -> "c.compare($1, $2) > 0",
-            'cast -> "",
-            'carg -> "c: java.util.Comparator[\\$TYPE\\$]",
-            'wcmp -> "WithCompartor",
-            'narg -> "(c)")
-        
+           
       val types: Map[String, Map[Symbol, String]] = Map(
           AnyValMap("Byte"),
           AnyValMap("Char"),
@@ -47,38 +37,38 @@ trait BoilerplateForSorter extends BoilerplateBase {
           AnyValMap("Int"),
           AnyValMap("Long"),
           AnyValMap("Short"),
-          "Object" -> Map('type -> "A",
-                          'decl -> "[A <: AnyRef with java.lang.Comparable[A]]",
-                          'le   -> "(($1).compareTo($2) <= 0)",
-                          'gt   -> "(($1).compareTo($2) > 0)",
-                          'cast -> ".asInstanceOf[Array[java.lang.Object]]",
-                          'carg -> "",
-                          'wcmp -> "",
-                          'narg -> ""),         
-          AnyValMapWithComparator("Byte"),
-          AnyValMapWithComparator("Char"),
-          AnyValMapWithComparator("Double"),
-          AnyValMapWithComparator("Float"),
-          AnyValMapWithComparator("Int"),
-          AnyValMapWithComparator("Long"),
-          AnyValMapWithComparator("Short"),                          
-          "ObjectWithComparator" -> Map('type -> "A",
-                          'decl -> "[A <: AnyRef with java.lang.Comparable[A]]",
-                          'le   -> "(($1).compareTo($2) <= 0)",
-                          'gt   -> "(($1).compareTo($2) > 0)",
-                          'cast -> ".asInstanceOf[Array[java.lang.Object]]",
-                          'carg -> "c: java.util.Comparator[\\$TYPE\\$]",
-                          'wcmp -> "WithCompartor",
-                          'narg -> "(c)"))
+          "Comparable" -> Map(
+              'type -> "A",
+              'decl -> "[A <: AnyRef with java.lang.Comparable[A]]",
+              'le   -> "(($1).compareTo($2) <= 0)",
+              'gt   -> "(($1).compareTo($2) > 0)",
+              'cast -> ".asInstanceOf[Array[java.lang.Object]]",
+              'cext -> "",
+              'carg -> "",
+              'wcmp -> "",
+              'narg -> ""),         
+          "Object" -> Map(
+              'type -> "A",
+              'decl -> "[A <: AnyRef]",
+              'le -> "c.compare($1, $2) <= 0",
+              'gt -> "c.compare($1, $2) > 0",
+              'cast -> "",
+              'cext -> ", c",
+              'carg -> "c: java.util.Comparator[_ >: \\$TYPE\\$]",
+              'wcmp -> "WithCompartor",
+              'jsrt -> "[A]",
+              'narg -> "[A](c)"))
 
      def replaceWithMap(str: String) = for { (_, map) <- types.toList.sort(_._1 < _._1) } yield
         str.replaceAll("\\$CARG\\$", map('carg))
-           .replaceAll("\\$CARGSEP\\$", (if (map('carg).isEmpty) "" else " ,"))
+           .replaceAll("\\$CARGSEP\\$", (if (map('carg).isEmpty) "" else ", "))
            .replaceAll("\\$WCMP\\$", map('wcmp))
            .replaceAll("\\$NARG\\$", map('narg))
            .replaceAll("\\$TYPE\\$", map('type))
            .replaceAll("\\$DECL\\$", map('decl))
            .replaceAll("\\$CAST\\$", map('cast))
+           .replaceAll("\\$CEXT\\$", map('cext))
+           .replaceAll("\\$JSRT\\$", map.getOrElse('jsrt, ""))
            .replaceAll("""\$LE\$\s*\(([^,]+),\s*([^()]+)\)""", map('le))
            .replaceAll("""\$GT\$\s*\(([^,]+),\s*([^()]+)\)""", map('gt))       
                           
@@ -184,7 +174,7 @@ object Plate {
         }
         
         if (r - p <= NTHRES) {
-          java.util.Arrays.sort(array$CAST$, p, r + 1)
+          java.util.Arrays.sort$JSRT$(array$CAST$, p, r + 1$CEXT$)
           if (nRemains.addAndGet(p - r - 1) == 0) {
             isDone = true
             semaphore.release(nThreads)
@@ -205,7 +195,7 @@ object Plate {
 """
   
   val sortTemplate = """
-  def sort$DECL$(a: Array[$TYPE$]$CARGSEP$$CARG$) = {
+  def sort$DECL$(a: Array[$TYPE$]$CARGSEP$$CARG$) {
     (new SorterOf$TYPE$$WCMP$$NARG$).sort(a)
   }
 
